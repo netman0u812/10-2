@@ -1,0 +1,82 @@
+=====================================================================
+ Egress NOT covered by Tanium — Splunk searches          v20261002
+=====================================================================
+Lookup file : tanium_agent_ips_lookup_v20261002.csv  (36,811 IPs)
+              columns: src_ip, tanium_host
+              built from ent-ipdataset-TANIUM-AGENT-HOSTS-v20260918
+              (IPs shared by 3+ hosts, loopback and link-local removed)
+
+Splunk setup (once):
+  1. Settings > Lookups > Lookup table files > New
+       upload the CSV, destination filename: tanium_agent_ips.csv
+  2. Settings > Lookups > Lookup definitions > New
+       name: tanium_agent_ips   type: File-based   file: tanium_agent_ips.csv
+  3. Share both with the app the searches run in.
+
+Time window: matches the Tanium 15-day report (approx. Sept 1–16, 2026)
+so results compare like for like. Change earliest/latest to re-run on
+current data (and refresh the lookup from the current agent list).
+
+Field names assume the Palo Alto Networks Add-on for Splunk
+(src_ip, dest_ip, dest_port, app, dvc_name, src_zone, dest_zone, action,
+bytes). If the CVS index uses different names, adjust the first lines.
+
+
+---------------------------------------------------------------------
+SEARCH 1 — Direct internet egress through the firewalls,
+           from sources that have NO Tanium agent
+---------------------------------------------------------------------
+index=pan_logs sourcetype=pan:traffic action=allowed
+    earliest="09/01/2026:00:00:00" latest="09/17/2026:00:00:00"
+| where NOT (cidrmatch("10.0.0.0/8",dest_ip) OR cidrmatch("172.16.0.0/12",dest_ip)
+          OR cidrmatch("192.168.0.0/16",dest_ip) OR cidrmatch("100.64.0.0/10",dest_ip))
+| lookup tanium_agent_ips src_ip OUTPUT tanium_host
+| where isnull(tanium_host)
+| eval source_type=case(
+      cidrmatch("10.93.0.0/24",src_ip) OR cidrmatch("10.6.65.0/24",src_ip), "F5 SNAT (real host hidden)",
+      cidrmatch("10.180.0.0/14",src_ip),                                   "Remote-access VPN pool",
+      cidrmatch("206.213.248.0/24",src_ip) OR cidrmatch("206.213.217.0/24",src_ip)
+        OR cidrmatch("206.213.251.0/24",src_ip) OR cidrmatch("206.213.209.0/24",src_ip), "Aetna proxy egress",
+      cidrmatch("204.99.118.0/24",src_ip),                                 "CVS Skyhigh proxy egress",
+      true(),                                                              "No Tanium agent")
+| stats count AS connections sum(bytes) AS bytes dc(dest_ip) AS destinations
+        values(app) AS apps values(dest_port) AS ports
+        BY dvc_name src_zone src_ip source_type
+| sort - connections
+
+  Notes
+  - Rows with source_type "Aetna/CVS proxy egress" are the proxies'
+    own outbound traffic: proxied user/server traffic, covered by Search 2.
+  - "F5 SNAT" sources hide the real server; resolve them from F5 logs.
+  - "No Tanium agent" is the true gap: hosts egressing with no Tanium view.
+
+
+---------------------------------------------------------------------
+SEARCH 2 — Proxied traffic (Skyhigh / MWG) from sources with NO agent
+---------------------------------------------------------------------
+index=webproxy
+    earliest="09/01/2026:00:00:00" latest="09/17/2026:00:00:00"
+| lookup tanium_agent_ips src_ip OUTPUT tanium_host
+| where isnull(tanium_host)
+| eval identity=case(user=="-" OR user=="NoAuthProd", "Unauthenticated",
+                     match(user,"^(?i)_?(srv|svc)_"), "Service account",
+                     true(), "User")
+| eval source_type=if(cidrmatch("10.93.0.0/24",src_ip) OR cidrmatch("10.6.65.0/24",src_ip),
+                      "F5 SNAT (real host hidden)", "No Tanium agent")
+| stats count AS requests dc(dest_host) AS destinations dc(user) AS users
+        values(category) AS categories
+        BY src_ip identity source_type
+| sort - requests
+
+  Notes
+  - Unauthenticated and service-account rows from non-agent sources are
+    the server traffic Tanium cannot see; human-identity rows are users.
+
+
+---------------------------------------------------------------------
+NEXT STEP
+---------------------------------------------------------------------
+Export both results (CSV) and drop them in
+IP_Datasets_Raw/Splunk_Egress_Gap/ — they can be joined to IPAM
+(site, NET_TYPE), ent_host_master (server / APM) and the Citrix
+inventory to show which servers and applications have no Tanium agent.

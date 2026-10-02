@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Internet Destinations by Site</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: one section per site group, application servers and Citrix side by side */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#18202b; --muted:#5d6878; --rule:#dde1e7; --track:#eceff3;
+  --bar:#8fb6e3; --proxy:#1f5fa8; --proxy-bg:#e4edf8; --zero:#b4560f;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --bar:#2f5683; --proxy:#5b9be0; --proxy-bg:#1a2b40; --zero:#e88a3c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --bar:#2f5683; --proxy:#5b9be0; --proxy-bg:#1a2b40; --zero:#e88a3c; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 48px;display:grid;gap:30px}
+header{display:grid;gap:8px}
+.eyebrow{font:500 12px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 clamp(26px,4vw,36px)/1.1 var(--f-display);margin:0;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:76ch}
+h2{font:600 22px/1.2 var(--f-display);margin:0 0 12px;text-wrap:balance}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px;display:grid;gap:10px;min-width:0}
+.card h3{font:600 16px/1.2 var(--f-body);margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:right;font-variant-numeric:tabular-nums}
+th{font:600 12px var(--f-body);color:var(--muted)}
+th:first-child,td:first-child{text-align:left}
+td.bar{width:34%;padding-right:0}
+.track{height:10px;background:var(--track);border-radius:2px;overflow:hidden}
+.track div{height:100%;background:var(--bar)}
+tr.px td{background:var(--proxy-bg);font-weight:600}
+tr.px .track div{background:var(--proxy)}
+tr.zs td:first-child, tr.zs td:nth-child(2){color:var(--zero);font-weight:600}
+tr.oth td{color:var(--muted)}
+.notes{display:grid;gap:8px;color:var(--muted);font-size:13.5px;max-width:82ch}
+.notes p{margin:0} .notes b{color:var(--ink);font-weight:600}
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Outbound internet connections · Tanium 15-day report, approx. Sept 1–16, 2026</div>
+    <h1>Internet Destinations by Site</h1>
+    <p class="lede">Where application servers and Citrix servers at each site send their outbound internet connections. Proxy rows are connections made to a proxy; every other row is a direct connection to that destination. Zscaler counts connections landing in Zscaler's IP ranges. All counts are 15-day totals (divide by 15 for a daily average).</p>
+  </header>
+  <div id="sections"></div>
+  <section class="notes">
+    <p><b>Application servers</b> are servers with an APM ID. Zscaler App Connectors and servers with no APM ID are left out.</p>
+    <p><b>Site</b> is where the server's IP sits in IPAM: Aetna is Middletown and Windsor; CVS is Shea, RI One and Cumberland 2100 Highland.</p>
+    <p><b>Time window:</b> Tanium export <code>15d_report</code> (drop 9-16-26), covering about Sept 1–16, 2026. The export has no timestamps, so traffic cannot be split by day.</p>
+    <p><b>Destination</b> is the network owner of the IP address. Tanium records connections, not bytes, and cannot see traffic redirected after it leaves the server (for example by WCCP).</p>
+  </section>
+</div>
+
+<script>
+const D={"Aetna (Middletown + Windsor)|Application servers":{"servers":8047,"total":4126263,"rows":[["Amazon Web Services",2114765],["Proxy: Aetna PAC",1300869],["Microsoft Azure",348953],["CrowdStrike",94762],["Proxy: CVS Skyhigh (F5 VIP)",79718],["Fastly",47732],["Google",46491],["Akamai",44938],["Amazon.com, Inc",19344],["Unknown",11749],["Salesforce",9665],["Microsoft",4419],["Zscaler",0],["Other (7 providers)",2858]]},"Aetna (Middletown + Windsor)|Citrix":{"servers":72,"total":35044,"rows":[["Proxy: Aetna PAC",27782],["Amazon Web Services",3483],["Microsoft Azure",1122],["Amazon.com, Inc",1116],["Fastly",708],["Akamai",461],["Unknown",189],["Google",91],["CrowdStrike",51],["Proxy: CVS Skyhigh (F5 VIP)",34],["Microsoft",6],["Cloudflare",1],["Zscaler",0]]},"CVS (Shea + RI)|Application servers":{"servers":5453,"total":4475041,"rows":[["Amazon Web Services",2552343],["Proxy: CVS Skyhigh (F5 VIP)",759665],["Microsoft Azure",619500],["Amazon.com, Inc",285405],["Proxy: Aetna PAC",42454],["Fastly",41369],["Google",40130],["CrowdStrike",37593],["Akamai",30409],["Unknown",16843],["GitHub",13065],["Microsoft",12034],["Zscaler",0],["Other (18 providers)",24231]]},"CVS (Shea + RI)|Citrix":{"servers":1974,"total":1531043,"rows":[["Microsoft",375449],["Microsoft Azure",367551],["Amazon Web Services",243109],["Google",162007],["Amazon.com, Inc",124575],["Akamai",86150],["Fastly",66217],["Cloudflare",54785],["Salesforce",14821],["Proxy: Aetna PAC",10492],["Unknown",7890],["Five9",4022],["Proxy: CVS Skyhigh (F5 VIP)",1311],["Zscaler",0],["Other (40 providers)",12664]]},"Las Vegas (Switch COLO)|Application servers":{"servers":970,"total":507847,"rows":[["Amazon Web Services",281193],["Microsoft Azure",81503],["Proxy: CVS Skyhigh (F5 VIP)",59988],["Proxy: Aetna PAC",45113],["CrowdStrike",13980],["Amazon.com, Inc",6700],["Twilio",5943],["Fastly",5405],["Akamai",3580],["Unknown",1556],["Google",1192],["Microsoft",1058],["Zscaler",0],["Other (6 providers)",636]]},"Las Vegas (Switch COLO)|Citrix":{"servers":636,"total":1800944,"rows":[["Microsoft",614775],["Microsoft Azure",499720],["Amazon.com, Inc",268731],["Google",97498],["Akamai",93260],["Amazon Web Services",92009],["Cloudflare",44571],["Salesforce",24460],["Fastly",24074],["Proxy: Aetna PAC",17177],["Five9",7748],["Proxy: CVS Skyhigh (F5 VIP)",7453],["Zscaler",0],["Other (32 providers)",9468]]}};
+const SITES=["Aetna (Middletown + Windsor)","CVS (Shea + RI)","Las Vegas (Switch COLO)"];
+const CLS=["Application servers","Citrix"];
+const C=n=>n.toLocaleString("en-US");
+const P=(a,b)=>b?(100*a/b).toFixed(1)+"%":"–";
+document.getElementById("sections").innerHTML=SITES.map(s=>`<section><h2>${s}</h2><div class="pair">`+CLS.map(c=>{
+  const t=D[s+"|"+c]; const max=Math.max(...t.rows.map(r=>r[1]));
+  const px=t.rows.filter(r=>r[0].startsWith("Proxy")).reduce((a,r)=>a+r[1],0);
+  const rows=t.rows.map(([d,v])=>{const cl=d.startsWith("Proxy")?"px":d==="Zscaler"?"zs":d.startsWith("Other")?"oth":"";
+    return `<tr class="${cl}"><td>${d}</td><td>${C(v)}</td><td>${P(v,t.total)}</td><td class="bar"><div class="track"><div style="width:${max?100*v/max:0}%"></div></div></td></tr>`}).join("");
+  return `<div class="card"><h3>${c}</h3><div class="meta"><span><b>${C(t.servers)}</b> servers</span><span><b>${C(t.total)}</b> connections</span><span><b>${P(px,t.total)}</b> via proxy</span></div>
+  <div class="tbl"><table><thead><tr><th>Destination</th><th>Connections</th><th>Share</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`}).join("")+`</div></section>`).join("");
+</script>
+
+</body>
+</html>
