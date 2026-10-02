@@ -1,0 +1,158 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Egress by Data Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: summary tiles, per-DC stacked bars (proxy vs direct by class), per-DC firewall table, origin table, notes */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#18202b; --muted:#5d6878; --rule:#dde1e7; --track:#eceff3;
+  --ap:#1f5fa8; --ad:#8fb6e3; --cp:#b4560f; --cd:#f0b27a; --np:#5d6878; --nd:#c9ced6;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --ap:#5b9be0; --ad:#2f5683; --cp:#e88a3c; --cd:#7a4a24; --np:#97a2b2; --nd:#3a4452; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --ap:#5b9be0; --ad:#2f5683; --cp:#e88a3c; --cd:#7a4a24; --np:#97a2b2; --nd:#3a4452; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:28px 48px;display:grid;gap:28px}
+header{display:grid;gap:8px}
+.eyebrow{font:500 12px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 clamp(26px,4vw,36px)/1.1 var(--f-display);margin:0;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:78ch}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.stat{background:var(--surface);padding:14px 16px;display:grid;gap:2px}
+.stat .k{font:500 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat b{font:600 28px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:14px;min-width:0}
+h2{font:600 21px/1.2 var(--f-display);margin:0;text-wrap:balance}
+.sub{margin:0;color:var(--muted);font-size:14px;max-width:80ch}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.rows{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 90px;gap:12px;align-items:center}
+.row .lab{font-weight:600;font-size:15px}
+.row .lab small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.track{height:26px;background:var(--track);border-radius:3px;overflow:hidden;display:flex}
+.track div{height:100%}
+.val{font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--rule);text-align:right;font-variant-numeric:tabular-nums;vertical-align:top}
+th{font:600 12px var(--f-body);color:var(--muted)}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+tr.dc td{font-weight:600;border-top:2px solid var(--ink);background:var(--track)}
+tr.tot td{font-weight:600;border-top:2px solid var(--ink)}
+td.fw{font-family:var(--f-mono);font-size:12.5px}
+td.hi{font-weight:600}
+.muted{color:var(--muted)}
+.notes{display:grid;gap:8px;color:var(--muted);font-size:13.5px;max-width:84ch}
+.notes p{margin:0} .notes b{color:var(--ink);font-weight:600}
+@media (max-width:640px){.row{grid-template-columns:1fr 80px}.row .lab{grid-column:1/-1}}
+</style>
+<style>body{margin:0}</style></head><body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Server internet egress · Tanium 15-day report, approx. Sept 1–16, 2026</div>
+    <h1>Egress by Data Center</h1>
+    <p class="lede">Server internet connections leaving through the egress firewalls at Middletown, Windsor, RI and Shea, split into traffic that went through a proxy first and traffic that went direct to the firewall, by protocol (HTTP vs HTTPS), and by where the servers sit.</p>
+  </header>
+
+  <section class="stats" id="stats" aria-label="Per data center totals"></section>
+
+  <section class="panel">
+    <h2>Proxied vs direct, by data center</h2>
+    <p class="sub">Connections leaving each data center's egress firewalls. Proxied means the server connected to a proxy (Aetna PAC or Skyhigh) and the proxy's own traffic left through that site; direct means the server's connection went straight to the egress firewall.</p>
+    <div class="legend" id="lg"></div>
+    <div class="rows" id="bars"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Firewalls at each data center</h2>
+    <div class="tbl"><table id="t1"></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>HTTP vs HTTPS, by data center</h2>
+    <p class="sub">Protocol is visible only for connections the server makes directly to an internet address (by destination port). Connections to an explicit proxy (Aetna PAC on 9119, Skyhigh F5 VIPs on 8080/9119) show only the proxy port, so whether the request behind them is HTTP or HTTPS is not visible in Tanium.</p>
+    <div class="legend" id="lg3"></div>
+    <div class="rows" id="bars3"></div>
+    <div class="tbl"><table id="t3"></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Where the traffic comes from</h2>
+    <p class="sub">Share of each data center's egress connections by the location of the server that started them. Traffic from other sites and from the cloud is backhauled to that data center, either to its proxies or because the server's routing domain egresses there.</p>
+    <div class="tbl"><table id="t2"></table></div>
+  </section>
+
+  <section class="notes">
+    <p><b>Scope.</b> Tanium server connections only (application servers, Citrix servers and servers with no APM ID); user traffic is mostly on Zscaler and is not in this page. ZPA App Connectors are excluded. Counts are connections over the 15-day window, not bytes.</p>
+    <p><b>Shea proxy share includes WCCP.</b> Direct Shea traffic matched by the WCCP redirect lists on PAZSHDC-SEC-INTWIR-01 (replayed against the 2026-09-09 configs) is counted as proxied. RI has no WCCP redirection in effect (line 1 of <code>wccp_95</code> is <code>deny ip any4 any</code>), so RI proxied traffic is explicit F5 VIP traffic only.</p>
+    <p><b>Aetna proxies egress through Cisco FTDs</b> (<code>mid/win-fw-proxy-ftd</code>), not Palo Alto. Aetna direct server and user traffic leaves through the GLR Palo Altos. RI proxy-farm egress through RRIWSCP-SEC-EXT-EMPTEMP is inferred (no NAT record).</p>
+    <p><b>HTTP vs HTTPS.</b> Port 443 is counted as HTTPS and port 80 as HTTP; the few connections that used both (about 61K) are counted as HTTPS. At Shea, the HTTPS and HTTP figures are the servers' own connections before WCCP: about 2.1M of Shea's direct connections are redirected to Skyhigh by WCCP, so they reach the internet through the proxy. Port 9997 is the Splunk forwarder port; all of it goes to Amazon Web Services addresses, consistent with a cloud-hosted Splunk indexer. Other ports include Google push (5228), Kafka (9092), SIP-TLS (5061) and AMQP-TLS (5671).</p>
+    <p><b>Origin</b> is the server's IPAM location. Proxied flows are attributed to the proxy's site; direct flows to the egress of the server's IPAM routing domain. "Other" is servers at other sites or unresolved.</p>
+    <p><b>Not in this page:</b> Las Vegas (2.88M direct), the Azure, GCP and AWS egress firewalls, provider-local cloud endpoints, and Zscaler.</p>
+  </section>
+</div>
+
+<script>
+const SEG={ap:["Applications · via proxy","var(--ap)"],ad:["Applications · direct","var(--ad)"],cp:["Citrix · via proxy","var(--cp)"],cd:["Citrix · direct","var(--cd)"],np:["No APM · via proxy","var(--np)"],nd:["No APM · direct","var(--nd)"]};
+const DC=[
+ {n:"Middletown",s:"Aetna",fw:[
+   {f:"mid-fw-glr-pa-a/b",t:"Palo Alto · direct (GLR)",v:{ad:1950015,cd:38223,nd:112119}},
+   {f:"mid-fw-proxy-ftd-1/2",t:"Cisco FTD · Aetna PAC proxy egress",v:{ap:1087646,cp:114915,np:96885}}]},
+ {n:"Windsor",s:"Aetna",fw:[
+   {f:"win-fw-glr-pa-a/b",t:"Palo Alto · direct (GLR)",v:{ad:440535,cd:79,nd:22665}},
+   {f:"win-fw-proxy-ftd-1/2",t:"Cisco FTD · Aetna PAC proxy egress",v:{ap:891998,cp:78991,np:73377}}]},
+ {n:"RI",s:"CVS",fw:[
+   {f:"RRIWSCP-SEC-EXT-EMPTEMP",t:"ASA + Palo Alto · direct and Skyhigh proxy egress",v:{ap:1026616,ad:1610772,cp:150425,cd:953066,np:71904,nd:23038}}]},
+ {n:"Shea",s:"CVS",fw:[
+   {f:"PAZSHDC-SEC-EXTWIR-PA-01/02",t:"Palo Alto · direct and Skyhigh proxy egress",v:{ap:2450242,ad:475389,cp:108112,cd:25480,np:130570,nd:2488}},
+   {f:"PAZSHDC-SEC-EXT-NET-PA-01/02",t:"Palo Alto · direct (EGR_SHEAE)",v:{ad:2629,cd:1792,nd:65390}}]}
+];
+const ORIGIN={"Middletown":{"Middletown":1850485,"Windsor":813930,"Azure":434725,"Las Vegas":133397,"Other":99440,"Shea":26166,"Phoenix":18592,"GCP":13823,"RI":7990,"AWS":23},"Windsor":{"Middletown":683984,"Windsor":389972,"Azure":337418,"Other":34283,"Shea":20658,"Las Vegas":17788,"Phoenix":9128,"RI":5936,"GCP":4927,"AWS":50},"RI":{"RI":2054387,"Shea":743413,"Azure":511538,"Phoenix":178390,"Other":102286,"GCP":100939,"Las Vegas":60378,"Windsor":43719,"Middletown":40006,"AWS":719},"Shea":{"Shea":1223049,"RI":567903,"Azure":530322,"Phoenix":374472,"Other":227688,"Las Vegas":157020,"Windsor":64804,"Middletown":62653,"GCP":47934}};
+const OCOL=["Middletown","Windsor","RI","Shea","Phoenix","Las Vegas","Azure","GCP","Other"];
+const K=["ap","ad","cp","cd","np","nd"], C=n=>n.toLocaleString("en-US"), P=(a,b)=>b?Math.round(100*a/b)+"%":"–";
+const M=n=>n>=1e6?(n/1e6).toFixed(2)+"M":Math.round(n/1e3)+"K";
+const sum=(v,ks=K)=>ks.reduce((a,k)=>a+(v[k]||0),0);
+DC.forEach(d=>{d.v={};K.forEach(k=>d.v[k]=d.fw.reduce((a,f)=>a+(f.v[k]||0),0));d.t=sum(d.v);d.px=sum(d.v,["ap","cp","np"]);});
+document.getElementById("stats").innerHTML=DC.map(d=>`<div class="stat"><span class="k">${d.n}</span><b>${M(d.t)}</b><span>${P(d.px,d.t)} via proxy · ${d.s}</span></div>`).join("");
+document.getElementById("lg").innerHTML=K.map(k=>`<span><i style="background:${SEG[k][1]}"></i>${SEG[k][0]}</span>`).join("");
+const max=Math.max(...DC.map(d=>d.t));
+document.getElementById("bars").innerHTML=DC.map(d=>`<div class="row"><div class="lab">${d.n}<small>${d.s} · ${P(d.px,d.t)} proxied</small></div><div class="track" role="img" aria-label="${d.n}: ${C(d.t)} connections, ${P(d.px,d.t)} via proxy">${K.map(k=>d.v[k]?`<div title="${SEG[k][0]}: ${C(d.v[k])} (${P(d.v[k],d.t)})" style="width:${100*d.v[k]/max}%;background:${SEG[k][1]}"></div>`:"").join("")}</div><div class="val">${C(d.t)}</div></div>`).join("");
+const cell=(v,t)=>v?`${C(v)} <span class="muted">(${P(v,t)})</span>`:"–";
+let h=`<thead><tr><th>Firewall</th><th class="l">Role</th>${K.map(k=>`<th>${SEG[k][0]}</th>`).join("")}<th>Total</th><th>Proxied</th></tr></thead><tbody>`;
+let G={};K.forEach(k=>G[k]=0);
+DC.forEach(d=>{h+=`<tr class="dc"><td>${d.n}</td><td class="l">${d.s}</td>${K.map(k=>`<td>${d.v[k]?C(d.v[k]):"–"}</td>`).join("")}<td>${C(d.t)}</td><td>${P(d.px,d.t)}</td></tr>`;
+  d.fw.forEach(f=>{const t=sum(f.v),px=sum(f.v,["ap","cp","np"]);h+=`<tr><td class="fw">${f.f}</td><td class="l muted">${f.t}</td>${K.map(k=>`<td>${f.v[k]?C(f.v[k]):"–"}</td>`).join("")}<td>${C(t)}</td><td>${P(px,t)}</td></tr>`});
+  K.forEach(k=>G[k]+=d.v[k]);});
+const GT=sum(G),GP=sum(G,["ap","cp","np"]);
+h+=`<tr class="tot"><td>Total, four data centers</td><td></td>${K.map(k=>`<td>${C(G[k])}</td>`).join("")}<td>${C(GT)}</td><td>${P(GP,GT)}</td></tr></tbody>`;
+document.getElementById("t1").innerHTML=h;
+let h2=`<thead><tr><th>Egress data center</th>${OCOL.map(o=>`<th>From ${o}</th>`).join("")}</tr></thead><tbody>`;
+DC.forEach(d=>{const o=ORIGIN[d.n];const tt=Object.values(o).reduce((a,b)=>a+b,0);const g=k=>k==="Other"?(o.Other||0)+(o.AWS||0):(o[k]||0);
+  h2+=`<tr><td>${d.n}</td>${OCOL.map(k=>`<td class="${k===d.n?'hi':''}">${g(k)?P(g(k),tt):"–"}</td>`).join("")}</tr>`;});
+document.getElementById("t2").innerHTML=h2+"</tbody>";
+
+const PT={"Middletown":{"https":1676685,"http":82629,"px":1298214,"splunk":333343,"oth":7700},"Windsor":{"https":128552,"http":1866,"px":1040865,"splunk":332853,"oth":8},"RI":{"https":2062055,"http":74297,"px":1248899,"splunk":435706,"oth":14818},"Shea":{"https":2307805,"http":79204,"px":598972,"splunk":256164,"oth":13700}};
+const PS={https:["HTTPS (443)","var(--ap)"],http:["HTTP (80)","var(--cp)"],px:["Explicit proxy (protocol not visible)","var(--nd)"],splunk:["Splunk forwarder (9997)","var(--np)"],oth:["Other ports","var(--cd)"]};
+const PK=["https","http","splunk","oth","px"];
+document.getElementById("lg3").innerHTML=PK.map(k=>`<span><i style="background:${PS[k][1]}"></i>${PS[k][0]}</span>`).join("");
+const pmax=Math.max(...DC.map(d=>PK.reduce((a,k)=>a+PT[d.n][k],0)));
+document.getElementById("bars3").innerHTML=DC.map(d=>{const v=PT[d.n],t=PK.reduce((a,k)=>a+v[k],0);
+  return `<div class="row"><div class="lab">${d.n}<small>HTTP is ${P(v.http,v.https+v.http)} of visible web</small></div><div class="track" role="img" aria-label="${d.n}: HTTPS ${C(v.https)}, HTTP ${C(v.http)}">${PK.map(k=>v[k]?`<div title="${PS[k][0]}: ${C(v[k])} (${P(v[k],t)})" style="width:${100*v[k]/pmax}%;background:${PS[k][1]}"></div>`:"").join("")}</div><div class="val">${C(t)}</div></div>`}).join("");
+let h3=`<thead><tr><th>Data center</th>${PK.map(k=>`<th>${PS[k][0]}</th>`).join("")}<th>Total</th><th>HTTP share of visible web</th></tr></thead><tbody>`;
+const PG={};PK.forEach(k=>PG[k]=0);
+DC.forEach(d=>{const v=PT[d.n],t=PK.reduce((a,k)=>a+v[k],0);PK.forEach(k=>PG[k]+=v[k]);
+  h3+=`<tr><td>${d.n}</td>${PK.map(k=>`<td>${cell(v[k],t)}</td>`).join("")}<td>${C(t)}</td><td class="hi">${P(v.http,v.https+v.http)}</td></tr>`});
+const PGT=PK.reduce((a,k)=>a+PG[k],0);
+h3+=`<tr class="tot"><td>Total</td>${PK.map(k=>`<td>${C(PG[k])} (${P(PG[k],PGT)})</td>`).join("")}<td>${C(PGT)}</td><td>${P(PG.http,PG.https+PG.http)}</td></tr></tbody>`;
+document.getElementById("t3").innerHTML=h3;
+</script>
+</body></html>
