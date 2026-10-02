@@ -1,0 +1,162 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Egress Path by Device Population</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: two device sets (servers, users), each a stacked bar per population plus a table; method notes at the end */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#18202b; --muted:#5d6878; --rule:#dde1e7; --track:#eceff3;
+  --zia:#6b55a8; --zpa:#b7a9de; --pxo:#1f5fa8; --pxd:#8fb6e3; --dir:#d9822b; --pa:#c9b48f; --none:#c9ced6;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --zia:#9a86d6; --zpa:#4d4370; --pxo:#5b9be0; --pxd:#2f5683; --dir:#e88a3c; --pa:#6f6248; --none:#3a4452; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#18202a; --ink:#e6eaf0; --muted:#97a2b2; --rule:#2a3441; --track:#222b37;
+  --zia:#9a86d6; --zpa:#4d4370; --pxo:#5b9be0; --pxd:#2f5683; --dir:#e88a3c; --pa:#6f6248; --none:#3a4452; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:28px 48px;display:grid;gap:28px}
+header{display:grid;gap:8px}
+.eyebrow{font:500 12px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 clamp(26px,4vw,36px)/1.1 var(--f-display);margin:0;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:78ch}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.stat{background:var(--surface);padding:14px 16px;display:grid;gap:2px}
+.stat b{font:600 28px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:14px;min-width:0}
+h2{font:600 21px/1.2 var(--f-display);margin:0;text-wrap:balance}
+.sub{margin:0;color:var(--muted);font-size:14px;max-width:80ch}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.rows{display:grid;gap:10px}
+.row{display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr) 70px;gap:12px;align-items:center}
+.row .lab{font-weight:500;font-size:14px}
+.track{height:22px;background:var(--track);border-radius:3px;overflow:hidden;display:flex}
+.track div{height:100%}
+.val{font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--rule);text-align:right;font-variant-numeric:tabular-nums}
+th{font:600 12px var(--f-body);color:var(--muted)}
+th:first-child,td:first-child{text-align:left}
+tr.tot td{font-weight:600;border-top:2px solid var(--ink)}
+td.hi{font-weight:600}
+.notes{display:grid;gap:8px;color:var(--muted);font-size:13.5px;max-width:84ch}
+.notes p{margin:0} .notes b{color:var(--ink);font-weight:600}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:500 14px var(--f-body);padding:7px 14px;border:1px solid var(--rule);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.panel h3{font:600 16px/1.2 var(--f-body);margin:6px 0 0}
+@media (max-width:640px){.row{grid-template-columns:1fr 60px}.row .lab{grid-column:1/-1}}
+</style>
+<style>body{margin:0}</style></head><body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Internet egress · device populations · Sept 2026</div>
+    <h1>Egress Path by Device Population</h1>
+    <p class="lede">Which devices are processed by the Palo Alto egress firewalls and the proxies, and which bypass both by tunnelling to Zscaler. Servers come from the Tanium report; users and other devices come from the firewall logs and IPAM.</p>
+  </header>
+
+  <section class="stats" aria-label="Summary">
+    <div class="stat"><b>195,354</b><span>internal devices seen at the egress firewalls</span></div>
+    <div class="stat"><b>~0.2%</b><span>of Tanium servers go to Zscaler; servers stay on Palo Alto and proxies</span></div>
+    <div class="stat"><b>64%</b><span>of user devices tunnel to Zscaler internet, bypassing Palo Alto and proxies</span></div>
+    <div class="stat"><b>2,975</b><span>servers with no Tanium agent (Palo Alto egress, no Zscaler)</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Servers: processed by the Palo Alto firewalls and proxies</h2>
+    <p class="sub">Tanium servers seen at the egress firewalls. Proxy and direct come from Tanium; Zscaler from the firewall logs.</p>
+    <div class="legend" id="lg1"></div>
+    <div class="rows" id="bars1"></div>
+    <div class="tbl"><table id="t1"></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Users and other devices: most bypass Palo Alto and proxies via Zscaler</h2>
+    <p class="sub">Devices without a Tanium agent, classified by their IPAM network type. For internet traffic tunnelled to Zscaler, the Palo Alto passes only the tunnel and the proxies never see it.</p>
+    <div class="legend" id="lg2"></div>
+    <div class="rows" id="bars2"></div>
+    <div class="tbl"><table id="t2"></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>By egress site</h2>
+    <p class="sub">Devices grouped by the Palo Alto egress firewalls their traffic leaves through: Aetna MID + WIN (GLR), CVS Shea + RI and Las Vegas (Switch). Cloud holds only what is actually in Azure (servers and VDI sessions with an Azure IPAM location), whichever firewall logged them; on-premises devices are never placed in Cloud. Each device is counted at one site (13 servers logged at two on-premises sites are counted at both).</p>
+    <div class="tabs" id="tabs" role="group" aria-label="Egress site"></div>
+    <h3>Servers</h3>
+    <div class="legend" id="lg3"></div>
+    <div class="rows" id="bars3"></div>
+    <div class="tbl"><table id="t3"></table></div>
+    <h3>Users and other devices</h3>
+    <div class="legend" id="lg4"></div>
+    <div class="rows" id="bars4"></div>
+    <div class="tbl"><table id="t4"></table></div>
+  </section>
+
+  <section class="notes">
+    <p><b>Sources.</b> Tanium 15-day server report (about Sept 1–16, 2026); Palo Alto egress firewall logs for traffic to Zscaler (37 extracts, May 22 – Sept 1, 2026) and to CrowdStrike (egress firewalls only), used as source-to-destination evidence for every device; IPAM all_IP_networks v20261002r9 for device type.</p>
+    <p><b>Device types.</b> Remote-access users are RA pools and VPN; site users and devices are campus, wireless, call-center, distribution, specialty and similar space, plus subnets IPAM labels as network management or data center where the addresses are user endpoints (see notes below); VDI user sessions are user-VDI subnets without a Tanium agent.</p>
+    <p><b>"Palo Alto, no Zscaler internet"</b> for non-Tanium devices means the firewall logs show no Zscaler internet (ZIA) traffic from them. Zscaler Private Access is not internet egress (it carries users to internal apps through an App Connector) and is not counted as a separate path; the 2,341 devices whose only Zscaler traffic was ZPA are in this group. Whether their web traffic also uses a proxy is not visible in this data.</p>
+    <p><b>Cloud.</b> Only the Azure hub firewalls appear in these logs. AWS and GCP servers reach the internet through the provider's own gateways, which are not in the Palo Alto logs, so they are not in the site view.</p>
+    <p><b>Server coverage.</b> Servers are counted only when they appear in the Palo Alto log extracts, which for servers means almost only the CrowdStrike extract. That extract has few rows from the Azure hub firewalls, so Azure is undercounted: 308 servers here against 7,021 Azure servers with internet traffic in Tanium. Across all sites the page shows 15,767 of about 26,000 Tanium application and Citrix servers with internet traffic. A Tanium-based server count by routing domain would close this gap.</p>
+    <p><b>Device counts, not traffic volume.</b> The firewall extracts are source-to-destination pairs without session counts, so this page counts devices. The share of traffic volume needs a Splunk extract with session counts per source over one window.</p>
+    <p><b>ZPA App Connectors are excluded.</b> The 158 Zscaler App Connector servers (Tanium APM0013984 <code>zsc</code>) do not browse the internet: their traffic to Zscaler is the ZPA broker tunnel plus ping/traceroute probes to Zscaler data centers. 373 application servers in IPAM subnets labelled <code>RA-CONN-ZPA</code> are ordinary application servers and are counted as such. Zscaler internet here means the firewall identified the app as Zscaler internet access, or web traffic to a Zscaler proxy address; ping/traceroute-only rows are not counted.</p>
+    <p><b>User devices in server address space.</b> 2,602 addresses in subnets IPAM labels as data center or application space (DataCenter, APP-DATA, cloud) send Zscaler Client Connector traffic (ZIA and ZPA). Servers do not run Client Connector, and Forescout identifies the ones it knows as workstations, laptops and desktops, so they are counted as site users and devices. The largest are 10.115.192.0/20 at Shea (383), 10.178.32.0/19 at Middletown (324) and 10.134.220.0/24 at RI One (173). "Servers with no Tanium agent" is the 2,975 server-space addresses that leave through the Palo Alto with no Zscaler traffic, including 123 addresses in INFRA and RA-CONN-ZPA subnets that an earlier version miscounted as remote-access users.</p>
+    <p><b>Distribution-center operational devices</b> are addresses in subnets IPAM labels <code>Management</code>, mostly at distribution centers: iBase industrial PCs (699), mobile handhelds and tablets (about 190), Zebra scanners and printers (32), plus 28 network appliances (FTD, switches, Infoblox). They do not use Zscaler; 70 addresses in that space that do are counted as site users. <b>Left out:</b> 3,969 public internet addresses (inbound sources arriving at the RI external firewalls, not CVS devices) and 28 internal addresses with no usable IPAM classification (15 with no IPAM subnet, plus Nashville call-center, partner-site and SNAT addresses).</p>
+    <p><b>Management space.</b> 2,045 addresses in 62 subnets that IPAM labels as access-point or switch management (MGT-AP 41, MGT-L2SW 19, WAN 2) are user clients, confirmed by Client Connector traffic and Forescout. All management-space addresses are counted as site users and devices. Every one of those subnets also holds active APs or switches, so most are shared management and user VLANs (worklist: ipam_nettype_user_reclass_candidates_v20261002.csv).</p>
+  </section>
+</div>
+
+<script>
+const SEG={
+  zia:{label:"Zscaler internet (bypasses Palo Alto and proxy)",col:"var(--zia)"},
+  pxo:{label:"Proxy only",col:"var(--pxo)"},
+  pxd:{label:"Proxy and direct",col:"var(--pxd)"},
+  dir:{label:"Direct to Palo Alto only",col:"var(--dir)"},
+  pa:{label:"Palo Alto, no Zscaler internet (web path not visible)",col:"var(--pa)"},
+  none:{label:"Seen at firewall, no internet in Tanium",col:"var(--none)"}
+};
+const S1=[
+  {n:"Application servers",v:{zia:4,pxo:872,pxd:7416,dir:3490,none:1270}},
+  {n:"Citrix servers",v:{zia:19,pxo:4,pxd:1237,dir:1455}}
+];
+const S2=[
+  {n:"Remote-access users",v:{zia:35670,pa:47516}},
+  {n:"Site users and devices",v:{zia:41561,pa:11095}},
+  {n:"VDI user sessions",v:{zia:34790,pa:5006}},
+  {n:"Servers with no Tanium agent",v:{pa:2975}},
+  {n:"Distribution-center operational devices",v:{pa:974}}
+];
+const C=n=>n.toLocaleString("en-US"), P=(a,b)=>b?Math.round(100*a/b)+"%":"–";
+function draw(rows,keys,lg,bars,tbl){
+  document.getElementById(lg).innerHTML=keys.map(k=>`<span><i style="background:${SEG[k].col}"></i>${SEG[k].label}</span>`).join("");
+  const tot=r=>keys.reduce((a,k)=>a+(r.v[k]||0),0);
+  document.getElementById(bars).innerHTML=rows.map(r=>{const t=tot(r);
+    return `<div class="row"><div class="lab">${r.n}</div><div class="track" role="img" aria-label="${r.n}: ${C(t)} devices">${keys.map(k=>r.v[k]?`<div title="${SEG[k].label}: ${C(r.v[k])} (${P(r.v[k],t)})" style="width:${100*r.v[k]/t}%;background:${SEG[k].col}"></div>`:"").join("")}</div><div class="val">${C(t)}</div></div>`}).join("");
+  const sums=Object.fromEntries(keys.map(k=>[k,rows.reduce((a,r)=>a+(r.v[k]||0),0)])), T=rows.reduce((a,r)=>a+tot(r),0);
+  document.getElementById(tbl).innerHTML=`<thead><tr><th>Population</th><th>Devices</th>${keys.map(k=>`<th>${SEG[k].label}</th>`).join("")}</tr></thead><tbody>`+
+    rows.map(r=>{const t=tot(r);return `<tr><td>${r.n}</td><td>${C(t)}</td>${keys.map(k=>`<td class="${k==='zia'?'hi':''}">${r.v[k]?C(r.v[k])+" <span style='color:var(--muted)'>("+P(r.v[k],t)+")</span>":"–"}</td>`).join("")}</tr>`}).join("")+
+    `<tr class="tot"><td>Total</td><td>${C(T)}</td>${keys.map(k=>`<td>${C(sums[k])} (${P(sums[k],T)})</td>`).join("")}</tr></tbody>`;
+}
+draw(S1,["pxo","pxd","dir","none","zia"],"lg1","bars1","t1");
+draw(S2,["zia","pa"],"lg2","bars2","t2");
+const SITES={"Aetna MID + WIN":{"Remote-access users":{"zia":26348,"pa":29741},"Site users and devices":{"zia":13423,"pa":5022},"VDI user sessions":{"zia":6949,"pa":884},"Servers with no Tanium agent":{"pa":895},"Application servers":{"pxd":3807,"pxo":587,"none":560,"dir":1396},"Citrix servers":{"dir":88,"pxd":117,"pxo":3},"Distribution-center operational devices":{"pa":1}},"CVS Shea + RI":{"Site users and devices":{"zia":28125,"pa":5955},"Servers with no Tanium agent":{"pa":1737},"Remote-access users":{"zia":9322,"pa":17775},"VDI user sessions":{"zia":2366,"pa":285},"Citrix servers":{"dir":878,"pxd":746},"Application servers":{"zia":4,"dir":1738,"pxd":3149,"pxo":200,"none":609},"Distribution-center operational devices":{"pa":972}},"Las Vegas":{"VDI user sessions":{"zia":621,"pa":762},"Citrix servers":{"zia":19,"dir":418,"pxd":162,"pxo":1},"Site users and devices":{"zia":13,"pa":115},"Application servers":{"pxd":220,"pxo":83,"dir":291,"none":58},"Servers with no Tanium agent":{"pa":177}},"Cloud (Azure hubs)":{"VDI user sessions":{"zia":24854,"pa":3075},"Application servers":{"pxo":3,"none":44,"pxd":245,"dir":70},"Citrix servers":{"pxd":212,"dir":71},"Servers with no Tanium agent":{"pa":167}}};
+const SRV=["Application servers","Citrix servers"], OTH=["Remote-access users","Site users and devices","VDI user sessions","Servers with no Tanium agent","Distribution-center operational devices"];
+const SK=Object.keys(SITES);
+function site(k){
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));
+  const d=SITES[k], pick=ns=>ns.filter(n=>d[n]).map(n=>({n,v:d[n]}));
+  draw(pick(SRV),["pxo","pxd","dir","none","zia"],"lg3","bars3","t3");
+  draw(pick(OTH),["zia","pa"],"lg4","bars4","t4");
+}
+document.getElementById("tabs").innerHTML=SK.map(k=>`<button type="button" data-k="${k}">${k}</button>`).join("");
+document.getElementById("tabs").onclick=e=>{const b=e.target.closest("button"); if(b) site(b.dataset.k)};
+site(SK[0]);
+</script>
+</body></html>
