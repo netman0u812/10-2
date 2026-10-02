@@ -1,0 +1,45 @@
+Because on the retail side, the "egress" firewall is also the front door
+for the SD-WAN overlay. A store whose WAN transport is the internet,
+whether broadband or a T-Mobile cellular link, can only reach the 128T
+head-ends by coming in through the internet edge, and the RSIA/DMVPN
+firewall tier is what sits on that edge.
+
+The path, from the retail topology skills:
+
+The head-end conductors at RI are NAT'd 1:1 from 10.230.125.196–.203 to
+public 12.230.70.242–.253, which AT&T AS 2386 advertises. There are also
+four statics, 207.242.146.201–.204/32, pointed at the RSIA firewall. At
+AZ (Shea), the conductors NAT from 10.231.125.196–.203 to
+12.51.52.18–.29, with statics 12.28.145.9–.12/32 pointed at the DMVPN
+firewall. That's from the 2020 drawing, so verify it's still current. So
+a store on T-Mobile goes: T-Mobile → internet → AT&T/COX/Lumen edge
+routers → RRICMDC-SEC-EXTRSIA-01/02 or the rricmcpsecextrs-1/DMVPN
+context → head-end. The firewall named for retail store egress is the
+same device that terminates this inbound overlay traffic, on its
+outside-to-inside path.
+
+Why it reads as "egress" in your view:
+
+The device is named and classed by its main job. In Firewall Class terms
+it supports both Internet Egress and Internet Ingress. The overlay
+transport is ingress through it, even though most of its other traffic
+is store users going out. CCD has no specific classification for the
+head-end NAT space. Per the topology skill, 12.230.70.x and 12.51.52.x
+are only covered by a broad 12.0.0.0/8 catch-all rule object in
+external_ip_registry (CVS_OWNED=N). Any report built on the EIR
+therefore sees "T-Mobile → AT&T 12.x" as generic external traffic
+crossing an internet-edge firewall. Nothing tells it this is CVS's own
+SD-WAN head-end. That's a real enrichment gap worth fixing regardless of
+how this event turns out.
+
+The quick test: look at the destination IP of the burst.
+
+If it's one of the head-end addresses above (or the current-equivalent
+NAT after the COX/Lumen 152.145.240.0/24 cutover), this is store SD-WAN
+transport arriving through the edge firewall, exactly as designed. If
+it's anything else (a 204.99/198.187 VIP, an RSIA NAT address used for
+store browsing, or random addresses), the SD-WAN explanation falls apart
+and the flood reading comes back into play.
+
+If you send the destination IP and the firewall hostname that logged it,
+I can pin down which of these it is.
